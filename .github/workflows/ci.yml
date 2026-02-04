@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Go lint
+        working-directory: server
+        run: |
+          go vet ./...
+
+      - name: Go test
+        working-directory: server
+        run: |
+          go test ./... -v
+
+      - name: Build server (linux/arm64)
+        working-directory: server
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/plugin-linux-arm64 .
+
+      - name: Install webapp deps
+        working-directory: webapp
+        run: npm install --legacy-peer-deps
+
+      - name: Build webapp
+        working-directory: webapp
+        run: npm run build
+
+      - name: Create bundle
+        run: make bundle

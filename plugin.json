@@ -1,0 +1,91 @@
+{
+    "id": "com.fambear.ai-limits-monitor",
+    "name": "AI Limits Monitor",
+    "description": "Monitor AI service usage and billing (Augment Code, OpenAI, Claude, Z.AI)",
+    "homepage_url": "https://github.com/alexander-voronkov/mattermost-ai-limits-monitor",
+    "support_url": "https://github.com/alexander-voronkov/mattermost-ai-limits-monitor/issues",
+    "icon_path": "assets/icon.svg",
+    "min_server_version": "10.0.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64",
+            "linux-arm64": "server/dist/plugin-linux-arm64",
+            "darwin-amd64": "server/dist/plugin-darwin-amd64",
+            "darwin-arm64": "server/dist/plugin-darwin-arm64",
+            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+        },
+        "executable": ""
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "Configure AI service credentials for monitoring usage and limits.",
+        "footer": "",
+        "settings": [
+            {
+                "key": "AugmentEnabled",
+                "display_name": "Enable Augment Code Monitoring",
+                "type": "bool",
+                "default": false,
+                "help_text": "Enable monitoring of Augment Code credit usage."
+            },
+            {
+                "key": "AugmentAccessToken",
+                "display_name": "Augment Access Token",
+                "type": "text",
+                "default": "",
+                "help_text": "Bearer token from Augment session.json (accessToken field)."
+            },
+            {
+                "key": "ZaiEnabled",
+                "display_name": "Enable Z.AI Monitoring",
+                "type": "bool",
+                "default": false,
+                "help_text": "Enable monitoring of Z.AI quota and subscription."
+            },
+            {
+                "key": "ZaiApiKey",
+                "display_name": "Z.AI API Key",
+                "type": "text",
+                "default": "",
+                "help_text": "Z.AI API key (same key used for model API calls)."
+            },
+            {
+                "key": "OpenaiEnabled",
+                "display_name": "Enable OpenAI Monitoring",
+                "type": "bool",
+                "default": false,
+                "help_text": "Enable monitoring of OpenAI costs and usage."
+            },
+            {
+                "key": "OpenaiApiKey",
+                "display_name": "OpenAI API Key",
+                "type": "text",
+                "default": "",
+                "help_text": "OpenAI API key with api.usage.read scope."
+            },
+            {
+                "key": "ClaudeEnabled",
+                "display_name": "Enable Claude Monitoring",
+                "type": "bool",
+                "default": false,
+                "help_text": "Enable monitoring of Claude/Anthropic usage."
+            },
+            {
+                "key": "ClaudeAdminApiKey",
+                "display_name": "Claude Admin API Key",
+                "type": "text",
+                "default": "",
+                "help_text": "Anthropic Admin API key for organization usage data."
+            },
+            {
+                "key": "CacheTTLSeconds",
+                "display_name": "Cache TTL (seconds)",
+                "type": "text",
+                "default": "300",
+                "help_text": "How long to cache API responses (default: 300 = 5 minutes)."
+            }
+        ]
+    }
+}
