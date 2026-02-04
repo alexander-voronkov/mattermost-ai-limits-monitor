@@ -33,6 +33,7 @@ func (p *Plugin) getAugmentStatus(config *Configuration) ServiceStatus {
 	req, _ := http.NewRequest("POST", "https://d2.api.augmentcode.com/get-credit-info", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer "+config.AugmentAccessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "MattermostPlugin/1.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -41,9 +42,12 @@ func (p *Plugin) getAugmentStatus(config *Configuration) ServiceStatus {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return ServiceStatus{ID: "augment", Name: "Augment Code", Enabled: true, Status: "error", Error: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))}
+	}
 	var raw map[string]interface{}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return ServiceStatus{ID: "augment", Name: "Augment Code", Enabled: true, Status: "error", Error: "Invalid response"}
+		return ServiceStatus{ID: "augment", Name: "Augment Code", Enabled: true, Status: "error", Error: fmt.Sprintf("Parse error: %v (body: %s)", err, string(body[:min(len(body), 200)]))}
 	}
 
 	info := AugmentCreditInfo{

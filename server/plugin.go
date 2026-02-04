@@ -23,15 +23,15 @@ type Plugin struct {
 
 // Configuration holds the plugin settings from System Console.
 type Configuration struct {
-	AugmentEnabled    bool   `json:"AugmentEnabled"`
-	AugmentAccessToken string `json:"AugmentAccessToken"`
-	ZaiEnabled        bool   `json:"ZaiEnabled"`
-	ZaiApiKey         string `json:"ZaiApiKey"`
-	OpenaiEnabled     bool   `json:"OpenaiEnabled"`
-	OpenaiApiKey      string `json:"OpenaiApiKey"`
-	ClaudeEnabled     bool   `json:"ClaudeEnabled"`
-	ClaudeAdminApiKey string `json:"ClaudeAdminApiKey"`
-	CacheTTLSeconds   string `json:"CacheTTLSeconds"`
+	AugmentEnabled     bool   `json:"augmentenabled"`
+	AugmentAccessToken string `json:"augmentaccesstoken"`
+	ZaiEnabled         bool   `json:"zaienabled"`
+	ZaiApiKey          string `json:"zaiapikey"`
+	OpenaiEnabled      bool   `json:"openaienabled"`
+	OpenaiApiKey       string `json:"openaiapikey"`
+	ClaudeEnabled      bool   `json:"claudeenabled"`
+	ClaudeAdminApiKey  string `json:"claudeadminapikey"`
+	CacheTTLSeconds    string `json:"cachettlseconds"`
 }
 
 // CacheEntry stores cached API response.
