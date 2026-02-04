@@ -30,7 +30,8 @@ type Configuration struct {
 	OpenaiEnabled      bool   `json:"openaienabled"`
 	OpenaiApiKey       string `json:"openaiapikey"`
 	ClaudeEnabled      bool   `json:"claudeenabled"`
-	ClaudeAdminApiKey  string `json:"claudeadminapikey"`
+	ClaudeApiKey       string `json:"claudeapikey"`
+	ClaudeModel        string `json:"claudemodel"`
 	CacheTTLSeconds    string `json:"cachettlseconds"`
 }
 

@@ -140,9 +140,40 @@ const OpenAICard: React.FC<{data: any}> = ({data}) => {
 
 const ClaudeCard: React.FC<{data: any}> = ({data}) => {
     if (!data) return null;
+
+    const hasRateLimits = data.requestLimit || data.tokenLimit;
+    if (!hasRateLimits) {
+        return (
+            <div>
+                <div style={{fontSize: '12px', color: '#8b8fa7'}}>{data.message || 'No rate limit data'}</div>
+            </div>
+        );
+    }
+
+    const reqLimit = parseInt(data.requestLimit, 10) || 0;
+    const reqRemaining = parseInt(data.requestsRemaining, 10) || 0;
+    const reqUsed = reqLimit - reqRemaining;
+
+    const tokLimit = parseInt(data.tokenLimit, 10) || 0;
+    const tokRemaining = parseInt(data.tokensRemaining, 10) || 0;
+    const tokUsed = tokLimit - tokRemaining;
+
     return (
         <div>
-            <div style={{fontSize: '12px', color: '#8b8fa7'}}>{data.message || 'Claude monitoring active'}</div>
+            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>
+                {data.model || 'Claude'}
+            </div>
+            {reqLimit > 0 && (
+                <UsageBar used={reqUsed} total={reqLimit} label="Requests (per min)" />
+            )}
+            {tokLimit > 0 && (
+                <UsageBar used={tokUsed} total={tokLimit} label="Tokens (per min)" />
+            )}
+            {data.requestsReset && (
+                <div style={{fontSize: '11px', color: '#8b8fa7'}}>
+                    Resets: {new Date(data.requestsReset).toLocaleTimeString()}
+                </div>
+            )}
         </div>
     );
 };

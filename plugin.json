@@ -73,11 +73,18 @@
                 "help_text": "Enable monitoring of Claude/Anthropic usage."
             },
             {
-                "key": "ClaudeAdminApiKey",
-                "display_name": "Claude Admin API Key",
+                "key": "ClaudeApiKey",
+                "display_name": "Anthropic API Key",
                 "type": "text",
                 "default": "",
-                "help_text": "Anthropic Admin API key for organization usage data."
+                "help_text": "Anthropic API key. A minimal request (1 token) is sent to read rate limits from response headers. Cost: ~$0.00001 per check."
+            },
+            {
+                "key": "ClaudeModel",
+                "display_name": "Claude Model",
+                "type": "text",
+                "default": "claude-sonnet-4-20250514",
+                "help_text": "Model to use for rate limit probe (default: claude-sonnet-4-20250514). Rate limits vary by model."
             },
             {
                 "key": "CacheTTLSeconds",

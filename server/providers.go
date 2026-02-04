@@ -185,7 +185,7 @@ func (p *Plugin) getZaiStatus(config *Configuration) ServiceStatus {
 type OpenAIUsageInfo struct {
 	TotalCost   float64 `json:"totalCost"`
 	Period      string  `json:"period"`
-	Error       string  `json:"error,omitempty"`
+	BucketCount int     `json:"bucketCount"`
 }
 
 func (p *Plugin) getOpenAIStatus(config *Configuration) ServiceStatus {
@@ -197,12 +197,15 @@ func (p *Plugin) getOpenAIStatus(config *Configuration) ServiceStatus {
 		return cached.(ServiceStatus)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	startDate := time.Now().AddDate(0, -1, 0).Format("2006-01-02")
-	url := fmt.Sprintf("https://api.openai.com/v1/organization/costs?start_time=%s&limit=1", startDate)
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// start_time must be Unix seconds (integer), not a date string
+	startTime := time.Now().AddDate(0, -1, 0).Unix()
+	url := fmt.Sprintf("https://api.openai.com/v1/organization/costs?start_time=%d&bucket_width=1d&limit=31", startTime)
 
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+config.OpenaiApiKey)
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -211,21 +214,32 @@ func (p *Plugin) getOpenAIStatus(config *Configuration) ServiceStatus {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		// Try to extract error message
+		var errResp map[string]interface{}
+		if json.Unmarshal(body, &errResp) == nil {
+			if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+				return ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: true, Status: "error",
+					Error: fmt.Sprintf("%s", getString(errObj, "message"))}
+			}
+		}
+		return ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: true, Status: "error",
+			Error: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))}
+	}
+
 	var raw map[string]interface{}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: true, Status: "error", Error: "Invalid response"}
+		return ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: true, Status: "error", Error: "Invalid JSON response"}
 	}
 
-	if errMsg, ok := raw["error"]; ok {
-		return ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: true, Status: "error", Error: fmt.Sprintf("%v", errMsg)}
-	}
-
+	startDate := time.Unix(startTime, 0).Format("2006-01-02")
 	info := OpenAIUsageInfo{
 		Period: startDate + " to now",
 	}
 
-	// Parse costs
+	// Parse cost buckets: data[].results[].amount (in cents)
 	if data, ok := raw["data"].([]interface{}); ok {
+		info.BucketCount = len(data)
 		for _, d := range data {
 			if dm, ok := d.(map[string]interface{}); ok {
 				if results, ok := dm["results"].([]interface{}); ok {
@@ -251,17 +265,25 @@ func (p *Plugin) getOpenAIStatus(config *Configuration) ServiceStatus {
 	return result
 }
 
-// ===== Claude =====
+// ===== Claude (Anthropic) =====
 
-type ClaudeUsageInfo struct {
-	Message string `json:"message"`
+type ClaudeRateLimitInfo struct {
+	Model             string `json:"model"`
+	RequestLimit      string `json:"requestLimit"`
+	RequestsRemaining string `json:"requestsRemaining"`
+	RequestsReset     string `json:"requestsReset"`
+	TokenLimit        string `json:"tokenLimit"`
+	TokensRemaining   string `json:"tokensRemaining"`
+	TokensReset       string `json:"tokensReset"`
+	InputTokensUsed   int64  `json:"inputTokensUsed"`
+	OutputTokensUsed  int64  `json:"outputTokensUsed"`
 }
 
 func (p *Plugin) getClaudeStatus(config *Configuration) ServiceStatus {
-	if config.ClaudeAdminApiKey == "" {
+	if config.ClaudeApiKey == "" {
 		return ServiceStatus{
-			ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "ok",
-			Data: ClaudeUsageInfo{Message: "Admin API key not configured. Add an Anthropic Admin API key to see usage data."},
+			ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
+			Error: "Anthropic API key not configured",
 		}
 	}
 
@@ -269,10 +291,71 @@ func (p *Plugin) getClaudeStatus(config *Configuration) ServiceStatus {
 		return cached.(ServiceStatus)
 	}
 
-	// TODO: Implement Claude Admin API when key is available
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// Send a minimal request to get rate limit headers
+	// Cost: ~1 input token + 1 output token ≈ $0.00001
+	model := config.ClaudeModel
+	if model == "" {
+		model = "claude-sonnet-4-20250514"
+	}
+	payload := fmt.Sprintf(`{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`, model)
+
+	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", strings.NewReader(payload))
+	req.Header.Set("x-api-key", config.ClaudeApiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
+			Error: fmt.Sprintf("API error: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		var errResp map[string]interface{}
+		if json.Unmarshal(body, &errResp) == nil {
+			if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+				return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
+					Error: getString(errObj, "message")}
+			}
+		}
+		return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
+			Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+
+	info := ClaudeRateLimitInfo{
+		Model: model,
+		// Rate limit headers from response
+		RequestLimit:      resp.Header.Get("anthropic-ratelimit-requests-limit"),
+		RequestsRemaining: resp.Header.Get("anthropic-ratelimit-requests-remaining"),
+		RequestsReset:     resp.Header.Get("anthropic-ratelimit-requests-reset"),
+		TokenLimit:        resp.Header.Get("anthropic-ratelimit-tokens-limit"),
+		TokensRemaining:   resp.Header.Get("anthropic-ratelimit-tokens-remaining"),
+		TokensReset:       resp.Header.Get("anthropic-ratelimit-tokens-reset"),
+	}
+
+	// Parse usage from response body
+	var respData map[string]interface{}
+	if json.Unmarshal(body, &respData) == nil {
+		if usage, ok := respData["usage"].(map[string]interface{}); ok {
+			info.InputTokensUsed = int64(getFloat(usage, "input_tokens"))
+			info.OutputTokensUsed = int64(getFloat(usage, "output_tokens"))
+		}
+	}
+
+	status := "ok"
+	// Could add warning logic based on remaining tokens ratio
+
 	result := ServiceStatus{
-		ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "ok",
-		Data:     ClaudeUsageInfo{Message: "Claude monitoring configured. Usage data coming soon."},
+		ID:       "claude",
+		Name:     "Claude (Anthropic)",
+		Enabled:  true,
+		Status:   status,
+		Data:     info,
 		CachedAt: time.Now().Unix(),
 	}
 	p.setCache("claude", result)
