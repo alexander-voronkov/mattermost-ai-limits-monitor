@@ -20,9 +20,7 @@ const fetchStatus = async (): Promise<StatusResponse> => {
     const resp = await fetch(`/plugins/${PLUGIN_ID}/api/v1/status`, {
         headers: {'X-Requested-With': 'XMLHttpRequest'},
     });
-    if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
 };
 
@@ -31,9 +29,7 @@ const refreshAll = async (): Promise<StatusResponse> => {
         method: 'POST',
         headers: {'X-Requested-With': 'XMLHttpRequest'},
     });
-    if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
 };
 
@@ -44,11 +40,18 @@ const formatNumber = (n: number): string => {
     return n.toFixed(0);
 };
 
-const formatTimeUntil = (timestampMs: number): string => {
-    const diff = timestampMs - Date.now();
+const formatTimeUntil = (input: number | string): string => {
+    let ts: number;
+    if (typeof input === 'string') {
+        ts = new Date(input).getTime();
+    } else {
+        ts = input;
+    }
+    const diff = ts - Date.now();
     if (diff <= 0) return 'now';
     const hours = Math.floor(diff / 3600000);
     const mins = Math.floor((diff % 3600000) / 60000);
+    if (hours > 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
     if (hours > 0) return `${hours}h ${mins}m`;
     return `${mins}m`;
 };
@@ -65,28 +68,40 @@ const getStatusColor = (status: string): string => {
 const UsageBar: React.FC<{used: number; total: number; label?: string}> = ({used, total, label}) => {
     const percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
     const color = percent > 90 ? '#d24b4e' : percent > 70 ? '#f5a623' : '#3db887';
-
     return (
         <div style={{marginBottom: '8px'}}>
             {label && <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '2px'}}>{label}</div>}
             <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <div style={{
-                    flex: 1,
-                    height: '8px',
-                    backgroundColor: '#e0e0e0',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                }}>
-                    <div style={{
-                        width: `${percent}%`,
-                        height: '100%',
-                        backgroundColor: color,
-                        borderRadius: '4px',
-                        transition: 'width 0.3s ease',
-                    }}/>
+                <div style={{flex: 1, height: '8px', backgroundColor: '#e0e0e0', borderRadius: '4px', overflow: 'hidden'}}>
+                    <div style={{width: `${percent}%`, height: '100%', backgroundColor: color, borderRadius: '4px', transition: 'width 0.3s ease'}}/>
                 </div>
                 <span style={{fontSize: '12px', color: '#555', minWidth: '60px', textAlign: 'right'}}>
                     {formatNumber(used)} / {formatNumber(total)}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+const UtilizationBar: React.FC<{utilization: number; label: string; resetAt?: string}> = ({utilization, label, resetAt}) => {
+    // utilization comes as percentage (e.g. 48.0 = 48%)
+    const percent = Math.min(utilization, 100);
+    const color = percent >= 100 ? '#d24b4e' : percent > 80 ? '#f5a623' : '#3db887';
+
+    let resetStr = '';
+    if (resetAt) {
+        resetStr = ` · resets in ${formatTimeUntil(resetAt)}`;
+    }
+
+    return (
+        <div style={{marginBottom: '8px'}}>
+            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '2px'}}>{label}{resetStr}</div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <div style={{flex: 1, height: '8px', backgroundColor: '#e0e0e0', borderRadius: '4px', overflow: 'hidden'}}>
+                    <div style={{width: `${percent}%`, height: '100%', backgroundColor: color, borderRadius: '4px', transition: 'width 0.3s ease'}}/>
+                </div>
+                <span style={{fontSize: '12px', color: '#555', minWidth: '50px', textAlign: 'right'}}>
+                    {percent.toFixed(0)}%
                 </span>
             </div>
         </div>
@@ -99,11 +114,7 @@ const AugmentCard: React.FC<{data: any}> = ({data}) => {
         <div>
             <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>{data.planName || 'Augment Code'}</div>
             <UsageBar used={data.usageUsed || 0} total={data.usageTotal || 0} label="Credits" />
-            {data.cycleEnd && (
-                <div style={{fontSize: '11px', color: '#8b8fa7'}}>
-                    Cycle ends: {new Date(data.cycleEnd).toLocaleDateString()}
-                </div>
-            )}
+            {data.cycleEnd && <div style={{fontSize: '11px', color: '#8b8fa7'}}>Cycle ends: {new Date(data.cycleEnd).toLocaleDateString()}</div>}
         </div>
     );
 };
@@ -117,109 +128,67 @@ const ZaiCard: React.FC<{data: any}> = ({data}) => {
             </div>
             <UsageBar used={data.tokensUsed || 0} total={data.tokensTotal || 0} label="Tokens (5h window)" />
             <UsageBar used={data.mcpUsed || 0} total={data.mcpTotal || 0} label="MCP Tools" />
-            {data.nextReset > 0 && (
-                <div style={{fontSize: '11px', color: '#8b8fa7'}}>
-                    Resets in: {formatTimeUntil(data.nextReset)}
-                </div>
-            )}
+            {data.nextReset > 0 && <div style={{fontSize: '11px', color: '#8b8fa7'}}>Resets in: {formatTimeUntil(data.nextReset)}</div>}
         </div>
     );
 };
 
 const OpenAICard: React.FC<{data: any}> = ({data}) => {
     if (!data) return null;
+    const cost = data.totalCost || 0;
+    const budget = data.budget || 0;
+    const credit = data.creditBalance;
+    const days = data.daysUntilReset || 0;
     return (
         <div>
-            <div style={{fontSize: '14px', fontWeight: 600}}>
-                ${(data.totalCost || 0).toFixed(2)}
-            </div>
-            <div style={{fontSize: '11px', color: '#8b8fa7'}}>{data.period || 'This period'}</div>
-        </div>
-    );
-};
-
-const UtilizationBar: React.FC<{utilization: number; label: string; resetEpoch?: string; status?: string}> = ({utilization, label, resetEpoch, status}) => {
-    const percent = Math.min(utilization * 100, 100);
-    const color = status === 'rejected' ? '#d24b4e' : percent > 80 ? '#d24b4e' : percent > 60 ? '#f5a623' : '#3db887';
-
-    let resetStr = '';
-    if (resetEpoch) {
-        const resetMs = parseInt(resetEpoch, 10) * 1000;
-        if (resetMs > Date.now()) {
-            resetStr = ` · resets in ${formatTimeUntil(resetMs)}`;
-        }
-    }
-
-    return (
-        <div style={{marginBottom: '8px'}}>
-            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '2px'}}>
-                {label}{resetStr}
-            </div>
-            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <div style={{
-                    flex: 1,
-                    height: '8px',
-                    backgroundColor: '#e0e0e0',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                }}>
-                    <div style={{
-                        width: `${percent}%`,
-                        height: '100%',
-                        backgroundColor: color,
-                        borderRadius: '4px',
-                        transition: 'width 0.3s ease',
-                    }}/>
+            {credit > 0 && (
+                <div style={{fontSize: '12px', marginBottom: '6px'}}>
+                    <span style={{color: '#8b8fa7'}}>Credit balance: </span>
+                    <span style={{fontWeight: 600}}>${credit.toFixed(2)}</span>
                 </div>
-                <span style={{fontSize: '12px', color: '#555', minWidth: '50px', textAlign: 'right'}}>
-                    {percent.toFixed(0)}%
-                </span>
+            )}
+            {budget > 0 ? (
+                <div>
+                    <div style={{fontSize: '12px', marginBottom: '4px'}}>
+                        <span style={{color: '#8b8fa7'}}>{data.period || 'Monthly'} budget: </span>
+                        <span style={{fontWeight: 600}}>${cost.toFixed(2)} / ${budget.toFixed(0)}</span>
+                    </div>
+                    <div style={{height: '6px', borderRadius: '3px', backgroundColor: '#e8e8e8', overflow: 'hidden'}}>
+                        <div style={{
+                            height: '100%', borderRadius: '3px',
+                            width: `${Math.min(cost / budget * 100, 100)}%`,
+                            backgroundColor: cost/budget >= 1 ? '#d24b4e' : cost/budget > 0.8 ? '#f5a623' : '#3db887',
+                        }}/>
+                    </div>
+                </div>
+            ) : (
+                <div style={{fontSize: '14px', fontWeight: 600}}>${cost.toFixed(2)}</div>
+            )}
+            <div style={{fontSize: '11px', color: '#8b8fa7', marginTop: '4px'}}>
+                Resets in {days} day{days !== 1 ? 's' : ''}
             </div>
         </div>
     );
 };
 
 const ClaudeCard: React.FC<{data: any}> = ({data}) => {
-    if (!data) return null;
-
-    const u5h = parseFloat(data.utilization5h) || 0;
-    const u7d = parseFloat(data.utilization7d) || 0;
-    const hasData = data.utilization5h || data.utilization7d;
-
-    if (!hasData) {
-        return (
-            <div>
-                <div style={{fontSize: '12px', color: '#8b8fa7'}}>
-                    {data.authMethod || 'OAuth'} · No rate limit data
-                </div>
-            </div>
-        );
+    if (!data || !data.hasData) {
+        return <div style={{fontSize: '12px', color: '#8b8fa7'}}>Connected · No usage data yet</div>;
     }
-
     return (
         <div>
-            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>
-                {data.authMethod || 'claude.ai'} 
-                {data.overageStatus === 'rejected' && 
-                    <span style={{color: '#d24b4e', marginLeft: '4px'}}>· overage disabled</span>
-                }
-            </div>
-            <UtilizationBar 
-                utilization={u5h} 
-                label="5-hour window" 
-                resetEpoch={data.reset5h}
-                status={data.status5h}
-            />
-            <UtilizationBar 
-                utilization={u7d} 
-                label="7-day window" 
-                resetEpoch={data.reset7d}
-                status={data.status7d}
-            />
-            {data.checkTimestamp > 0 && (
-                <div style={{fontSize: '10px', color: '#b0b0b0'}}>
-                    Checked: {new Date(data.checkTimestamp * 1000).toLocaleTimeString()}
-                </div>
+            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>claude.ai</div>
+            {data.utilization5h !== undefined && (
+                <UtilizationBar utilization={data.utilization5h} label="5-hour window" resetAt={data.reset5h} />
+            )}
+            {data.utilization7d !== undefined && (
+                <UtilizationBar utilization={data.utilization7d} label="7-day window" resetAt={data.reset7d} />
+            )}
+            {data.sonnetUtil > 0 && (
+                <UtilizationBar utilization={data.sonnetUtil} label="Sonnet (weekly)" />
+            )}
+            {data.opusUtil > 0 && (
+                <UtilizationBar utilization={data.opusUtil} label="Opus (weekly)" />
             )}
         </div>
     );
@@ -243,23 +212,16 @@ const ServiceCard: React.FC<{service: ServiceData}> = ({service}) => {
 
     return (
         <div style={{
-            padding: '12px',
-            marginBottom: '8px',
-            borderRadius: '8px',
+            padding: '12px', marginBottom: '8px', borderRadius: '8px',
             backgroundColor: 'var(--center-channel-bg, #fff)',
             border: '1px solid var(--center-channel-color-08, #e0e0e0)',
         }}>
             <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
-                <div style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: statusColor,
-                }}/>
+                <div style={{width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusColor}}/>
                 <span style={{fontWeight: 600, fontSize: '14px'}}>{service.name}</span>
             </div>
             {renderData()}
-            {service.cachedAt && (
+            {service.cachedAt && service.cachedAt > 0 && (
                 <div style={{fontSize: '10px', color: '#b0b0b0', marginTop: '4px'}}>
                     Updated: {new Date(service.cachedAt * 1000).toLocaleTimeString()}
                 </div>
@@ -301,7 +263,6 @@ const RHSPanel: React.FC = () => {
 
     useEffect(() => {
         loadData();
-        // Auto-refresh every 5 minutes
         const interval = setInterval(loadData, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, [loadData]);
@@ -310,39 +271,20 @@ const RHSPanel: React.FC = () => {
         <div style={{padding: '16px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
                 <h3 style={{margin: 0, fontSize: '16px', fontWeight: 600}}>AI Service Limits</h3>
-                <button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    style={{
-                        padding: '4px 12px',
-                        border: '1px solid var(--center-channel-color-16, #ccc)',
-                        borderRadius: '4px',
-                        backgroundColor: 'transparent',
-                        cursor: refreshing ? 'wait' : 'pointer',
-                        fontSize: '13px',
-                    }}
-                >
+                <button onClick={handleRefresh} disabled={refreshing} style={{
+                    padding: '4px 12px', border: '1px solid var(--center-channel-color-16, #ccc)',
+                    borderRadius: '4px', backgroundColor: 'transparent',
+                    cursor: refreshing ? 'wait' : 'pointer', fontSize: '13px',
+                }}>
                     {refreshing ? '⏳' : '🔄'} Refresh
                 </button>
             </div>
-
-            {loading && (
-                <div style={{textAlign: 'center', padding: '24px', color: '#8b8fa7'}}>Loading...</div>
-            )}
-
+            {loading && <div style={{textAlign: 'center', padding: '24px', color: '#8b8fa7'}}>Loading...</div>}
             {error && (
-                <div style={{
-                    padding: '12px',
-                    backgroundColor: '#fef0f0',
-                    borderRadius: '8px',
-                    color: '#d24b4e',
-                    fontSize: '13px',
-                    marginBottom: '8px',
-                }}>
+                <div style={{padding: '12px', backgroundColor: '#fef0f0', borderRadius: '8px', color: '#d24b4e', fontSize: '13px', marginBottom: '8px'}}>
                     Error: {error}
                 </div>
             )}
-
             {!loading && services.map((service) => (
                 <ServiceCard key={service.id} service={service} />
             ))}

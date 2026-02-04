@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,8 +20,9 @@ type Plugin struct {
 	configuration     *Configuration
 
 	// Cache
-	cacheLock    sync.RWMutex
-	cache        map[string]*CacheEntry
+	cacheLock sync.RWMutex
+	cache     map[string]*CacheEntry
+
 }
 
 // Configuration holds the plugin settings from System Console.
@@ -27,9 +31,13 @@ type Configuration struct {
 	AugmentAccessToken string `json:"augmentaccesstoken"`
 	ZaiEnabled         bool   `json:"zaienabled"`
 	ZaiApiKey          string `json:"zaiapikey"`
-	OpenaiEnabled      bool   `json:"openaienabled"`
-	OpenaiApiKey       string `json:"openaiapikey"`
-	ClaudeEnabled bool `json:"claudeenabled"`
+	OpenaiEnabled        bool   `json:"openaienabled"`
+	OpenaiApiKey         string `json:"openaiapikey"`
+	OpenaiMonthlyBudget  string `json:"openaimonthlybudget"`
+	OpenaiCreditBalance  string `json:"openaicreditbalance"`
+	ClaudeEnabled      bool   `json:"claudeenabled"`
+	ClaudeAccessToken  string `json:"claudeaccesstoken"`
+	ClaudeRefreshToken string `json:"clauderefreshtoken"`
 }
 
 // CacheEntry stores cached API response.
@@ -40,19 +48,21 @@ type CacheEntry struct {
 
 // ServiceStatus represents the status of one AI service.
 type ServiceStatus struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Enabled     bool        `json:"enabled"`
-	Status      string      `json:"status"` // "ok", "warning", "error", "disabled"
-	Data        interface{} `json:"data,omitempty"`
-	Error       string      `json:"error,omitempty"`
-	CachedAt    int64       `json:"cachedAt,omitempty"`
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Enabled  bool        `json:"enabled"`
+	Status   string      `json:"status"` // "ok", "warning", "error", "disabled"
+	Data     interface{} `json:"data,omitempty"`
+	Error    string      `json:"error,omitempty"`
+	CachedAt int64       `json:"cachedAt,omitempty"`
 }
 
 // AllServicesResponse is the response for GET /api/v1/status.
 type AllServicesResponse struct {
 	Services []ServiceStatus `json:"services"`
 }
+
+// (no KV store needed — session key is in plugin config)
 
 func (p *Plugin) OnActivate() error {
 	p.cache = make(map[string]*CacheEntry)
@@ -87,22 +97,17 @@ func (p *Plugin) OnConfigurationChange() error {
 }
 
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
-	// Check user is logged in
+	// Serve static assets from webapp/dist/
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		p.serveStaticFile(w, r)
+		return
+	}
+
+	// Check user is logged in for API routes
 	userID := r.Header.Get("Mattermost-User-Id")
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
-	}
-
-	// Only system admins can view AI service usage
-	user, appErr := p.API.GetUser(userID)
-	if appErr != nil {
-		http.Error(w, "Failed to get user", http.StatusInternalServerError)
-		return
-	}
-	if !user.IsSystemAdmin() {
-		// Allow all users to see status, but could restrict later
-		_ = user
 	}
 
 	switch {
@@ -110,18 +115,38 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		p.handleGetStatus(w, r)
 	case r.URL.Path == "/api/v1/refresh" && r.Method == http.MethodPost:
 		p.handleRefresh(w, r)
-	case r.URL.Path == "/api/v1/claude-push" && r.Method == http.MethodPost:
-		p.handleClaudePush(w, r)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (p *Plugin) serveStaticFile(w http.ResponseWriter, r *http.Request) {
+	bundlePath, err := p.API.GetBundlePath()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	cleanPath := filepath.Clean(r.URL.Path)
+	if strings.Contains(cleanPath, "..") {
+		http.NotFound(w, r)
+		return
+	}
+	filePath := filepath.Join(bundlePath, "webapp", "dist", cleanPath)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Also check assets/
+		filePath = filepath.Join(bundlePath, "assets", cleanPath)
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	http.ServeFile(w, r, filePath)
 }
 
 func (p *Plugin) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 	services := []ServiceStatus{}
 
-	// Always show all 4 services — enabled ones with live data, disabled ones with hint
 	if config.AugmentEnabled {
 		services = append(services, p.getAugmentStatus(config))
 	} else {
@@ -152,12 +177,10 @@ func (p *Plugin) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	// Clear cache
 	p.cacheLock.Lock()
 	p.cache = make(map[string]*CacheEntry)
 	p.cacheLock.Unlock()
 
-	// Return fresh data
 	p.handleGetStatus(w, r)
 }
 

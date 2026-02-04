@@ -13,8 +13,9 @@ class PluginClass {
 
         // Register AppBar icon (Mattermost 10+)
         if (registry.registerAppBarComponent) {
+            const iconURL = `/plugins/${PLUGIN_ID}/static/app-bar-icon.png`;
             registry.registerAppBarComponent(
-                'assets/icon.svg',
+                iconURL,
                 () => store.dispatch(toggleRHSPlugin),
                 'AI Limits Monitor',
             );

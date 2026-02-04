@@ -4,7 +4,7 @@
     "description": "Monitor AI service usage and billing (Augment Code, OpenAI, Claude, Z.AI)",
     "homepage_url": "https://github.com/alexander-voronkov/mattermost-ai-limits-monitor",
     "support_url": "https://github.com/alexander-voronkov/mattermost-ai-limits-monitor/issues",
-    "icon_path": "assets/icon.svg",
+    "icon_path": "assets/app-bar-icon.png",
     "min_server_version": "10.0.0",
     "server": {
         "executables": {
@@ -66,11 +66,39 @@
                 "help_text": "OpenAI API key with api.usage.read scope."
             },
             {
+                "key": "OpenaiMonthlyBudget",
+                "display_name": "OpenAI Monthly Budget ($)",
+                "type": "text",
+                "default": "50",
+                "help_text": "Monthly spending limit in USD (as set in your OpenAI billing settings)."
+            },
+            {
+                "key": "OpenaiCreditBalance",
+                "display_name": "OpenAI Credit Balance ($)",
+                "type": "text",
+                "default": "",
+                "help_text": "Prepaid credit balance. Update manually from OpenAI dashboard (not available via API)."
+            },
+            {
                 "key": "ClaudeEnabled",
                 "display_name": "Enable Claude Monitoring",
                 "type": "bool",
                 "default": false,
-                "help_text": "Enable Claude (Anthropic) rate limit monitoring. Data is pushed by an external cron job via POST /api/v1/claude-push. See scripts/claude-check.sh."
+                "help_text": "Enable Claude usage monitoring."
+            },
+            {
+                "key": "ClaudeAccessToken",
+                "display_name": "Claude Access Token",
+                "type": "text",
+                "default": "",
+                "help_text": "OAuth access token from Claude CLI. Run 'claude' on server, authorize, then copy accessToken from ~/.claude/.credentials.json"
+            },
+            {
+                "key": "ClaudeRefreshToken",
+                "display_name": "Claude Refresh Token",
+                "type": "text",
+                "default": "",
+                "help_text": "OAuth refresh token for auto-renewal. Copy refreshToken from same file."
             }
         ]
     }
