@@ -121,27 +121,29 @@ func (p *Plugin) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	config := p.getConfiguration()
 	services := []ServiceStatus{}
 
+	// Always show all 4 services — enabled ones with live data, disabled ones with hint
 	if config.AugmentEnabled {
 		services = append(services, p.getAugmentStatus(config))
-	}
-	if config.ZaiEnabled {
-		services = append(services, p.getZaiStatus(config))
-	}
-	if config.OpenaiEnabled {
-		services = append(services, p.getOpenAIStatus(config))
-	}
-	if config.ClaudeEnabled {
-		services = append(services, p.getClaudeStatus(config))
+	} else {
+		services = append(services, ServiceStatus{ID: "augment", Name: "Augment Code", Enabled: false, Status: "disabled", Error: "Not configured. Enable in System Console → Plugins → AI Limits Monitor."})
 	}
 
-	// If nothing enabled, show placeholder
-	if len(services) == 0 {
-		services = append(services, ServiceStatus{
-			ID:     "none",
-			Name:   "No Services Configured",
-			Status: "disabled",
-			Error:  "Enable AI services in System Console → Plugins → AI Limits Monitor",
-		})
+	if config.ZaiEnabled {
+		services = append(services, p.getZaiStatus(config))
+	} else {
+		services = append(services, ServiceStatus{ID: "zai", Name: "Z.AI", Enabled: false, Status: "disabled", Error: "Not configured. Enable in System Console → Plugins → AI Limits Monitor."})
+	}
+
+	if config.OpenaiEnabled {
+		services = append(services, p.getOpenAIStatus(config))
+	} else {
+		services = append(services, ServiceStatus{ID: "openai", Name: "OpenAI", Enabled: false, Status: "disabled", Error: "Not configured. Enable in System Console → Plugins → AI Limits Monitor."})
+	}
+
+	if config.ClaudeEnabled {
+		services = append(services, p.getClaudeStatus(config))
+	} else {
+		services = append(services, ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: false, Status: "disabled", Error: "Not configured. Enable in System Console → Plugins → AI Limits Monitor."})
 	}
 
 	resp := AllServicesResponse{Services: services}
