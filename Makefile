@@ -39,11 +39,11 @@ webapp:
 ## Bundle into tar.gz
 bundle:
 	@echo "Creating plugin bundle..."
-	@rm -rf dist
+	@rm -rf dist/$(PLUGIN_ID)
 	@mkdir -p dist/$(PLUGIN_ID)/server/dist dist/$(PLUGIN_ID)/webapp/dist dist/$(PLUGIN_ID)/assets
 	@cp plugin.json dist/$(PLUGIN_ID)/
-	@cp -r server/dist/* dist/$(PLUGIN_ID)/server/dist/
-	@cp webapp/dist/main.js dist/$(PLUGIN_ID)/webapp/dist/
+	@if ls server/dist/plugin-* 1>/dev/null 2>&1; then cp server/dist/plugin-* dist/$(PLUGIN_ID)/server/dist/; fi
+	@if [ -f webapp/dist/main.js ]; then cp webapp/dist/main.js dist/$(PLUGIN_ID)/webapp/dist/; fi
 	@cp assets/icon.svg dist/$(PLUGIN_ID)/assets/
 	@cd dist && tar -czf $(BUNDLE_NAME) $(PLUGIN_ID)
 	@echo "Bundle created: dist/$(BUNDLE_NAME)"
