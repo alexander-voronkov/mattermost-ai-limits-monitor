@@ -265,90 +265,95 @@ func (p *Plugin) getOpenAIStatus(config *Configuration) ServiceStatus {
 	return result
 }
 
-// ===== Claude (Anthropic) =====
+// ===== Claude (Anthropic) via webhook push =====
 
+// ClaudeRateLimitInfo holds unified rate limit data pushed by external script.
 type ClaudeRateLimitInfo struct {
-	Model             string `json:"model"`
-	RequestLimit      string `json:"requestLimit"`
-	RequestsRemaining string `json:"requestsRemaining"`
-	RequestsReset     string `json:"requestsReset"`
-	TokenLimit        string `json:"tokenLimit"`
-	TokensRemaining   string `json:"tokensRemaining"`
-	TokensReset       string `json:"tokensReset"`
-	InputTokensUsed   int64  `json:"inputTokensUsed"`
-	OutputTokensUsed  int64  `json:"outputTokensUsed"`
+	AuthMethod       string            `json:"authMethod"`
+	Utilization5h    string            `json:"utilization5h"`
+	Reset5h          string            `json:"reset5h"`
+	Status5h         string            `json:"status5h"`
+	Utilization7d    string            `json:"utilization7d"`
+	Reset7d          string            `json:"reset7d"`
+	Status7d         string            `json:"status7d"`
+	OverageStatus    string            `json:"overageStatus"`
+	RepresentClaim   string            `json:"representativeClaim"`
+	AllHeaders       map[string]string `json:"allHeaders,omitempty"`
+	CheckTimestamp   int64             `json:"checkTimestamp,omitempty"`
+}
+
+// claudeWebhookPayload is the JSON payload pushed by the external check script.
+type claudeWebhookPayload struct {
+	Timestamp  int64             `json:"timestamp"`
+	RateLimits map[string]string `json:"rateLimits"`
+	Error      string            `json:"error,omitempty"`
 }
 
 func (p *Plugin) getClaudeStatus(config *Configuration) ServiceStatus {
-	if config.ClaudeApiKey == "" {
-		return ServiceStatus{
-			ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
-			Error: "Anthropic API key not configured",
-		}
+	if !config.ClaudeEnabled {
+		return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: false, Status: "disabled"}
 	}
 
+	// Check if we have webhook data
 	if cached, ok := p.getCached("claude"); ok {
 		return cached.(ServiceStatus)
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	// Send a minimal request to get rate limit headers
-	// Cost: ~1 input token + 1 output token ≈ $0.00001
-	model := config.ClaudeModel
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
+	// No data yet — return waiting status
+	return ServiceStatus{
+		ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "warning",
+		Error: "Waiting for data. Push rate limits via POST /api/v1/claude-push (use claude-check.sh cron job).",
 	}
-	payload := fmt.Sprintf(`{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`, model)
+}
 
-	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", strings.NewReader(payload))
-	req.Header.Set("x-api-key", config.ClaudeApiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
+// handleClaudePush accepts rate limit data from external script.
+func (p *Plugin) handleClaudePush(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
-			Error: fmt.Sprintf("API error: %v", err)}
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	var payload claudeWebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	if resp.StatusCode != 200 {
-		var errResp map[string]interface{}
-		if json.Unmarshal(body, &errResp) == nil {
-			if errObj, ok := errResp["error"].(map[string]interface{}); ok {
-				return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
-					Error: getString(errObj, "message")}
-			}
+	if payload.Error != "" {
+		result := ServiceStatus{
+			ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
+			Error:    payload.Error,
+			CachedAt: time.Now().Unix(),
 		}
-		return ServiceStatus{ID: "claude", Name: "Claude (Anthropic)", Enabled: true, Status: "error",
-			Error: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+		p.setCache("claude", result)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "error_stored"})
+		return
 	}
 
+	rl := payload.RateLimits
 	info := ClaudeRateLimitInfo{
-		Model: model,
-		// Rate limit headers from response
-		RequestLimit:      resp.Header.Get("anthropic-ratelimit-requests-limit"),
-		RequestsRemaining: resp.Header.Get("anthropic-ratelimit-requests-remaining"),
-		RequestsReset:     resp.Header.Get("anthropic-ratelimit-requests-reset"),
-		TokenLimit:        resp.Header.Get("anthropic-ratelimit-tokens-limit"),
-		TokensRemaining:   resp.Header.Get("anthropic-ratelimit-tokens-remaining"),
-		TokensReset:       resp.Header.Get("anthropic-ratelimit-tokens-reset"),
-	}
-
-	// Parse usage from response body
-	var respData map[string]interface{}
-	if json.Unmarshal(body, &respData) == nil {
-		if usage, ok := respData["usage"].(map[string]interface{}); ok {
-			info.InputTokensUsed = int64(getFloat(usage, "input_tokens"))
-			info.OutputTokensUsed = int64(getFloat(usage, "output_tokens"))
-		}
+		AuthMethod:     "oauth (claude.ai)",
+		Utilization5h:  rl["anthropic-ratelimit-unified-5h-utilization"],
+		Reset5h:        rl["anthropic-ratelimit-unified-5h-reset"],
+		Status5h:       rl["anthropic-ratelimit-unified-5h-status"],
+		Utilization7d:  rl["anthropic-ratelimit-unified-7d-utilization"],
+		Reset7d:        rl["anthropic-ratelimit-unified-7d-reset"],
+		Status7d:       rl["anthropic-ratelimit-unified-7d-status"],
+		OverageStatus:  rl["anthropic-ratelimit-unified-overage-status"],
+		RepresentClaim: rl["anthropic-ratelimit-unified-representative-claim"],
+		AllHeaders:     rl,
+		CheckTimestamp: payload.Timestamp,
 	}
 
 	status := "ok"
-	// Could add warning logic based on remaining tokens ratio
+	if u5h := parseFloat(info.Utilization5h); u5h > 0.8 {
+		status = "warning"
+	}
+	if info.Status5h == "rejected" || info.Status7d == "rejected" {
+		status = "error"
+	}
 
 	result := ServiceStatus{
 		ID:       "claude",
@@ -358,8 +363,22 @@ func (p *Plugin) getClaudeStatus(config *Configuration) ServiceStatus {
 		Data:     info,
 		CachedAt: time.Now().Unix(),
 	}
-	p.setCache("claude", result)
-	return result
+	// Cache for 1 hour (data is pushed periodically by cron)
+	p.cacheLock.Lock()
+	p.cache["claude"] = &CacheEntry{Data: result, FetchedAt: time.Now().Add(55 * time.Minute)}
+	p.cacheLock.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func parseFloat(s string) float64 {
+	if s == "" {
+		return 0
+	}
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
 }
 
 // ===== Helpers =====

@@ -29,10 +29,7 @@ type Configuration struct {
 	ZaiApiKey          string `json:"zaiapikey"`
 	OpenaiEnabled      bool   `json:"openaienabled"`
 	OpenaiApiKey       string `json:"openaiapikey"`
-	ClaudeEnabled      bool   `json:"claudeenabled"`
-	ClaudeApiKey       string `json:"claudeapikey"`
-	ClaudeModel        string `json:"claudemodel"`
-	CacheTTLSeconds    string `json:"cachettlseconds"`
+	ClaudeEnabled bool `json:"claudeenabled"`
 }
 
 // CacheEntry stores cached API response.
@@ -113,6 +110,8 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		p.handleGetStatus(w, r)
 	case r.URL.Path == "/api/v1/refresh" && r.Method == http.MethodPost:
 		p.handleRefresh(w, r)
+	case r.URL.Path == "/api/v1/claude-push" && r.Method == http.MethodPost:
+		p.handleClaudePush(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -163,20 +162,7 @@ func (p *Plugin) handleRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) getCacheTTL() time.Duration {
-	config := p.getConfiguration()
-	ttl := 300 // default 5 min
-	if config.CacheTTLSeconds != "" {
-		parsed := 0
-		for _, c := range config.CacheTTLSeconds {
-			if c >= '0' && c <= '9' {
-				parsed = parsed*10 + int(c-'0')
-			}
-		}
-		if parsed > 0 {
-			ttl = parsed
-		}
-	}
-	return time.Duration(ttl) * time.Second
+	return 5 * time.Minute
 }
 
 func (p *Plugin) getCached(key string) (interface{}, bool) {

@@ -70,28 +70,7 @@
                 "display_name": "Enable Claude Monitoring",
                 "type": "bool",
                 "default": false,
-                "help_text": "Enable monitoring of Claude/Anthropic usage."
-            },
-            {
-                "key": "ClaudeApiKey",
-                "display_name": "Anthropic API Key",
-                "type": "text",
-                "default": "",
-                "help_text": "Anthropic API key. A minimal request (1 token) is sent to read rate limits from response headers. Cost: ~$0.00001 per check."
-            },
-            {
-                "key": "ClaudeModel",
-                "display_name": "Claude Model",
-                "type": "text",
-                "default": "claude-sonnet-4-20250514",
-                "help_text": "Model to use for rate limit probe (default: claude-sonnet-4-20250514). Rate limits vary by model."
-            },
-            {
-                "key": "CacheTTLSeconds",
-                "display_name": "Cache TTL (seconds)",
-                "type": "text",
-                "default": "300",
-                "help_text": "How long to cache API responses (default: 300 = 5 minutes)."
+                "help_text": "Enable Claude (Anthropic) rate limit monitoring. Data is pushed by an external cron job via POST /api/v1/claude-push. See scripts/claude-check.sh."
             }
         ]
     }

@@ -138,40 +138,87 @@ const OpenAICard: React.FC<{data: any}> = ({data}) => {
     );
 };
 
+const UtilizationBar: React.FC<{utilization: number; label: string; resetEpoch?: string; status?: string}> = ({utilization, label, resetEpoch, status}) => {
+    const percent = Math.min(utilization * 100, 100);
+    const color = status === 'rejected' ? '#d24b4e' : percent > 80 ? '#d24b4e' : percent > 60 ? '#f5a623' : '#3db887';
+
+    let resetStr = '';
+    if (resetEpoch) {
+        const resetMs = parseInt(resetEpoch, 10) * 1000;
+        if (resetMs > Date.now()) {
+            resetStr = ` · resets in ${formatTimeUntil(resetMs)}`;
+        }
+    }
+
+    return (
+        <div style={{marginBottom: '8px'}}>
+            <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '2px'}}>
+                {label}{resetStr}
+            </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <div style={{
+                    flex: 1,
+                    height: '8px',
+                    backgroundColor: '#e0e0e0',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                }}>
+                    <div style={{
+                        width: `${percent}%`,
+                        height: '100%',
+                        backgroundColor: color,
+                        borderRadius: '4px',
+                        transition: 'width 0.3s ease',
+                    }}/>
+                </div>
+                <span style={{fontSize: '12px', color: '#555', minWidth: '50px', textAlign: 'right'}}>
+                    {percent.toFixed(0)}%
+                </span>
+            </div>
+        </div>
+    );
+};
+
 const ClaudeCard: React.FC<{data: any}> = ({data}) => {
     if (!data) return null;
 
-    const hasRateLimits = data.requestLimit || data.tokenLimit;
-    if (!hasRateLimits) {
+    const u5h = parseFloat(data.utilization5h) || 0;
+    const u7d = parseFloat(data.utilization7d) || 0;
+    const hasData = data.utilization5h || data.utilization7d;
+
+    if (!hasData) {
         return (
             <div>
-                <div style={{fontSize: '12px', color: '#8b8fa7'}}>{data.message || 'No rate limit data'}</div>
+                <div style={{fontSize: '12px', color: '#8b8fa7'}}>
+                    {data.authMethod || 'OAuth'} · No rate limit data
+                </div>
             </div>
         );
     }
 
-    const reqLimit = parseInt(data.requestLimit, 10) || 0;
-    const reqRemaining = parseInt(data.requestsRemaining, 10) || 0;
-    const reqUsed = reqLimit - reqRemaining;
-
-    const tokLimit = parseInt(data.tokenLimit, 10) || 0;
-    const tokRemaining = parseInt(data.tokensRemaining, 10) || 0;
-    const tokUsed = tokLimit - tokRemaining;
-
     return (
         <div>
             <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>
-                {data.model || 'Claude'}
+                {data.authMethod || 'claude.ai'} 
+                {data.overageStatus === 'rejected' && 
+                    <span style={{color: '#d24b4e', marginLeft: '4px'}}>· overage disabled</span>
+                }
             </div>
-            {reqLimit > 0 && (
-                <UsageBar used={reqUsed} total={reqLimit} label="Requests (per min)" />
-            )}
-            {tokLimit > 0 && (
-                <UsageBar used={tokUsed} total={tokLimit} label="Tokens (per min)" />
-            )}
-            {data.requestsReset && (
-                <div style={{fontSize: '11px', color: '#8b8fa7'}}>
-                    Resets: {new Date(data.requestsReset).toLocaleTimeString()}
+            <UtilizationBar 
+                utilization={u5h} 
+                label="5-hour window" 
+                resetEpoch={data.reset5h}
+                status={data.status5h}
+            />
+            <UtilizationBar 
+                utilization={u7d} 
+                label="7-day window" 
+                resetEpoch={data.reset7d}
+                status={data.status7d}
+            />
+            {data.checkTimestamp > 0 && (
+                <div style={{fontSize: '10px', color: '#b0b0b0'}}>
+                    Checked: {new Date(data.checkTimestamp * 1000).toLocaleTimeString()}
                 </div>
             )}
         </div>
