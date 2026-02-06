@@ -44,7 +44,9 @@ bundle:
 	@cp plugin.json dist/$(PLUGIN_ID)/
 	@if ls server/dist/plugin-* 1>/dev/null 2>&1; then cp server/dist/plugin-* dist/$(PLUGIN_ID)/server/dist/; fi
 	@if [ -f webapp/dist/main.js ]; then cp webapp/dist/main.js dist/$(PLUGIN_ID)/webapp/dist/; fi
-	@cp assets/icon.svg dist/$(PLUGIN_ID)/assets/
+	@mkdir -p dist/$(PLUGIN_ID)/webapp/dist/static
+	@cp assets/app-bar-icon.png dist/$(PLUGIN_ID)/assets/
+	@cp assets/app-bar-icon.png dist/$(PLUGIN_ID)/webapp/dist/static/
 	@cd dist && tar -czf $(BUNDLE_NAME) $(PLUGIN_ID)
 	@echo "Bundle created: dist/$(BUNDLE_NAME)"
 
