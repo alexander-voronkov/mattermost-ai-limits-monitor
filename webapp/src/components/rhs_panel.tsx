@@ -271,21 +271,18 @@ const RHSPanel: React.FC = () => {
         <div style={{
             display: 'flex',
             flexDirection: 'column',
-            height: '100%',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            overflow: 'hidden',
+            height: 'calc(100vh - 63px)',
+            minHeight: 0,
+            backgroundColor: 'var(--center-channel-bg, #f8f9fa)',
         }}>
             <div style={{
-                padding: '16px',
-                flex: 1,
-                overflowY: 'auto',
-                overflowX: 'hidden',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--center-channel-color-08, #e0e0e0)',
+                flexShrink: 0,
             }}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
                 <h3 style={{margin: 0, fontSize: '16px', fontWeight: 600}}>AI Service Limits</h3>
                 <button onClick={handleRefresh} disabled={refreshing} style={{
                     padding: '4px 12px', border: '1px solid var(--center-channel-color-16, #ccc)',
@@ -295,15 +292,22 @@ const RHSPanel: React.FC = () => {
                     {refreshing ? '⏳' : '🔄'} Refresh
                 </button>
             </div>
-            {loading && <div style={{textAlign: 'center', padding: '24px', color: '#8b8fa7'}}>Loading...</div>}
-            {error && (
-                <div style={{padding: '12px', backgroundColor: '#fef0f0', borderRadius: '8px', color: '#d24b4e', fontSize: '13px', marginBottom: '8px'}}>
-                    Error: {error}
-                </div>
-            )}
-            {!loading && services.map((service) => (
-                <ServiceCard key={service.id} service={service} />
-            ))}
+            <div style={{
+                padding: '16px',
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+            }}>
+                {loading && <div style={{textAlign: 'center', padding: '24px', color: '#8b8fa7'}}>Loading...</div>}
+                {error && (
+                    <div style={{padding: '12px', backgroundColor: '#fef0f0', borderRadius: '8px', color: '#d24b4e', fontSize: '13px', marginBottom: '8px'}}>
+                        Error: {error}
+                    </div>
+                )}
+                {!loading && services.map((service) => (
+                    <ServiceCard key={service.id} service={service} />
+                ))}
             </div>
         </div>
     );
