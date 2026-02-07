@@ -113,7 +113,7 @@ const AugmentCard: React.FC<{data: any}> = ({data}) => {
     return (
         <div>
             <div style={{fontSize: '12px', color: '#8b8fa7', marginBottom: '4px'}}>{data.planName || 'Augment Code'}</div>
-            <UsageBar used={data.usageUsed || 0} total={data.usageTotal || 0} label="Credits" />
+            <UsageBar used={data.usageUsed || 0} total={data.usageTotal || 0} label={`Credits: ${formatNumber(data.usageRemaining || 0)} remaining`} />
             {data.cycleEnd && <div style={{fontSize: '11px', color: '#8b8fa7'}}>Cycle ends: {new Date(data.cycleEnd).toLocaleDateString()}</div>}
         </div>
     );
@@ -217,15 +217,15 @@ const ServiceCard: React.FC<{service: ServiceData}> = ({service}) => {
             border: '1px solid var(--center-channel-color-08, #e0e0e0)',
         }}>
             <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
-                <div style={{width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusColor}}/>
-                <span style={{fontWeight: 600, fontSize: '14px'}}>{service.name}</span>
+                <div style={{width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0}}/>
+                <span style={{fontWeight: 600, fontSize: '14px', flex: 1}}>{service.name}</span>
+                {service.cachedAt && service.cachedAt > 0 && (
+                    <span style={{fontSize: '10px', color: '#b0b0b0', flexShrink: 0}}>
+                        {new Date(service.cachedAt * 1000).toLocaleTimeString()}
+                    </span>
+                )}
             </div>
             {renderData()}
-            {service.cachedAt && service.cachedAt > 0 && (
-                <div style={{fontSize: '10px', color: '#b0b0b0', marginTop: '4px'}}>
-                    Updated: {new Date(service.cachedAt * 1000).toLocaleTimeString()}
-                </div>
-            )}
         </div>
     );
 };
@@ -268,7 +268,23 @@ const RHSPanel: React.FC = () => {
     }, [loadData]);
 
     return (
-        <div style={{padding: '16px'}}>
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            overflow: 'hidden',
+        }}>
+            <div style={{
+                padding: '16px',
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+            }}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
                 <h3 style={{margin: 0, fontSize: '16px', fontWeight: 600}}>AI Service Limits</h3>
                 <button onClick={handleRefresh} disabled={refreshing} style={{
@@ -288,6 +304,7 @@ const RHSPanel: React.FC = () => {
             {!loading && services.map((service) => (
                 <ServiceCard key={service.id} service={service} />
             ))}
+            </div>
         </div>
     );
 };

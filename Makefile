@@ -1,5 +1,5 @@
 PLUGIN_ID ?= com.fambear.ai-limits-monitor
-PLUGIN_VERSION ?= 0.1.0
+PLUGIN_VERSION ?= 0.5.0
 BUNDLE_NAME ?= $(PLUGIN_ID)-$(PLUGIN_VERSION).tar.gz
 
 # Build targets
