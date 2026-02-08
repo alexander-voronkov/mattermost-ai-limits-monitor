@@ -27,6 +27,8 @@ type Plugin struct {
 
 // Configuration holds the plugin settings from System Console.
 type Configuration struct {
+	AllowedUserIds     string `json:"alloweduserids"`
+	AllowedTeamIds     string `json:"allowedteamids"`
 	AugmentEnabled     bool   `json:"augmentenabled"`
 	AugmentAccessToken string `json:"augmentaccesstoken"`
 	ZaiEnabled         bool   `json:"zaienabled"`
@@ -96,6 +98,44 @@ func (p *Plugin) OnConfigurationChange() error {
 	return nil
 }
 
+// checkAccess returns true if user is allowed to access this plugin.
+func (p *Plugin) checkAccess(userID string) bool {
+	config := p.getConfiguration()
+	
+	// If no restrictions set, allow everyone
+	if config.AllowedUserIds == "" && config.AllowedTeamIds == "" {
+		return true
+	}
+	
+	// Check allowed users
+	if config.AllowedUserIds != "" {
+		allowedUsers := strings.Split(config.AllowedUserIds, ",")
+		for _, id := range allowedUsers {
+			if strings.TrimSpace(id) == userID {
+				return true
+			}
+		}
+	}
+	
+	// Check allowed teams
+	if config.AllowedTeamIds != "" {
+		allowedTeams := strings.Split(config.AllowedTeamIds, ",")
+		for _, teamID := range allowedTeams {
+			teamID = strings.TrimSpace(teamID)
+			if teamID == "" {
+				continue
+			}
+			// Check if user is member of this team
+			_, err := p.API.GetTeamMember(teamID, userID)
+			if err == nil {
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	// Serve static assets from webapp/dist/
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -109,8 +149,18 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	
+	// Check access permissions
+	if !p.checkAccess(userID) {
+		http.Error(w, `{"error": "access_denied", "message": "You don't have permission to access this plugin"}`, http.StatusForbidden)
+		return
+	}
 
 	switch {
+	case r.URL.Path == "/api/v1/access" && r.Method == http.MethodGet:
+		// Always returns OK if we got here (access already checked above)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"allowed": true}`))
 	case r.URL.Path == "/api/v1/status" && r.Method == http.MethodGet:
 		p.handleGetStatus(w, r)
 	case r.URL.Path == "/api/v1/refresh" && r.Method == http.MethodPost:

@@ -24,6 +24,20 @@
         "footer": "",
         "settings": [
             {
+                "key": "AllowedUserIds",
+                "display_name": "Allowed Users",
+                "type": "text",
+                "default": "",
+                "help_text": "Comma-separated list of user IDs who can access this plugin. Leave empty to allow all users."
+            },
+            {
+                "key": "AllowedTeamIds",
+                "display_name": "Allowed Teams",
+                "type": "text",
+                "default": "",
+                "help_text": "Comma-separated list of team IDs whose members can access this plugin. Leave empty to allow all teams."
+            },
+            {
                 "key": "AugmentEnabled",
                 "display_name": "Enable Augment Code Monitoring",
                 "type": "bool",
