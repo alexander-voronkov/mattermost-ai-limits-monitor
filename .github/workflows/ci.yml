@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -49,3 +50,36 @@ jobs:
         with:
           name: plugin-bundle
           path: dist/*.tar.gz
+
+      # Deploy to Mattermost server (only on push to main or manual trigger)
+      - name: Disable plugin on Mattermost server
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        run: |
+          curl -f -X POST "${{ secrets.MM_URL }}/api/v4/plugins/com.fambear.ai-limits-monitor/disable" \
+            -H "Authorization: Bearer ${{ secrets.MM_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" || echo "Plugin already disabled or not found"
+
+      - name: Upload plugin to Mattermost server
+        if: github.event_name != 'pull_request'
+        run: |
+          BUNDLE=$(ls dist/*.tar.gz | head -1)
+          echo "Uploading $BUNDLE..."
+          curl -f -X POST "${{ secrets.MM_URL }}/api/v4/plugins" \
+            -H "Authorization: Bearer ${{ secrets.MM_ACCESS_TOKEN }}" \
+            -F "plugin=@$BUNDLE" \
+            -F "force=true"
+
+      - name: Enable plugin on Mattermost server
+        if: github.event_name != 'pull_request'
+        run: |
+          curl -f -X POST "${{ secrets.MM_URL }}/api/v4/plugins/com.fambear.ai-limits-monitor/enable" \
+            -H "Authorization: Bearer ${{ secrets.MM_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json"
+
+      - name: Deployment Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## Plugin Deployed! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plugin ID:** com.fambear.ai-limits-monitor" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Enabled" >> $GITHUB_STEP_SUMMARY
